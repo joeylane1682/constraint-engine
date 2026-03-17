@@ -5,7 +5,7 @@ import {
   computeLayout,
   getComputedLayoutMap,
 } from "./yogaAdapter";
-import { dashboardLayout } from "./layoutTree";
+import { dashboardLayout } from "./templates/dashboard";
 
 describe("yogaAdapter", () => {
   it("lays out a sidebar + content correctly", () => {

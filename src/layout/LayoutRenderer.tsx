@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
+import * as MUI from "@mui/material";
 import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
@@ -26,9 +27,13 @@ interface LayoutRendererProps {
   computedMap: ComputedLayoutMap;
 }
 
+/** Reserved keys in node.props; not passed through to the MUI content component. */
+const RESERVED_PROPS = ["componentType"];
+
 /**
  * Renders a single layout node with MUI (Box, Container, Stack, Grid) using Yoga-computed layout.
- * container -> Container, stack -> Stack, grid -> Grid, generic -> Box.
+ * If node.props.componentType is set, resolves that name from MUI and renders it as content
+ * inside the layout wrapper; unknown names render a fallback to avoid crashes.
  */
 function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.ReactElement {
   const computed = computedMap[node.id];
@@ -37,22 +42,50 @@ function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.React
 
   const layoutSx = computed
     ? {
-        position: "absolute" as const,
-        left: computed.left,
-        top: computed.top,
-        width: computed.width,
-        height: computed.height,
-        boxSizing: "border-box" as const,
-        border: "1px solid",
-        borderColor: "divider",
-      }
+      position: "absolute" as const,
+      left: computed.left,
+      top: computed.top,
+      width: computed.width,
+      height: computed.height,
+      boxSizing: "border-box" as const,
+      border: "1px solid",
+      borderColor: "divider",
+    }
     : {};
 
   const childElements = children.map((child) => (
     <LayoutNodeView key={child.id} node={child} computedMap={computedMap} />
   ));
 
-  return <MuiComponent sx={layoutSx}>{childElements}</MuiComponent>;
+  const componentType =
+    node.props && typeof node.props.componentType === "string"
+      ? node.props.componentType
+      : null;
+  const ContentComponent = componentType
+    ? (MUI as unknown as Record<string, React.ElementType>)[componentType]
+    : null;
+  const restProps =
+    node.props && componentType
+      ? Object.fromEntries(
+        Object.entries(node.props).filter(([k]) => !RESERVED_PROPS.includes(k))
+      )
+      : {};
+
+  const contentNode =
+    componentType && ContentComponent ? (
+      <ContentComponent {...restProps} />
+    ) : componentType ? (
+      <MUI.Typography variant="body2" color="error">
+        Unknown component: {componentType}
+      </MUI.Typography>
+    ) : null;
+
+  return (
+    <MuiComponent sx={layoutSx}>
+      {contentNode}
+      {childElements}
+    </MuiComponent>
+  );
 }
 
 interface LayoutRendererRootProps {

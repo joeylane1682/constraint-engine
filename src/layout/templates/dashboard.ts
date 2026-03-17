@@ -1,6 +1,6 @@
-//LayoutTree defines the page blueprint (tree structure of the page)
+// Dashboard blueprint: header + list panel + detail panel
 
-import type { LayoutNode } from "./layoutTypes";
+import type { LayoutNode } from "../layoutTypes";
 
 export const dashboardLayout: LayoutNode = {
   id: "root",
@@ -25,6 +25,7 @@ export const dashboardLayout: LayoutNode = {
         alignItems: "center",
         justifyContent: "space-between",
       },
+      props: { componentType: "Typography", variant: "h6", children: "Dashboard" },
       children: [],
     },
     {
@@ -55,11 +56,11 @@ export const dashboardLayout: LayoutNode = {
                 gap: 4,
               },
               children: [
-                { id: "list-item-1", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { label: "Item 1" }, children: [] },
-                { id: "list-item-2", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { label: "Item 2" }, children: [] },
-                { id: "list-item-3", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { label: "Item 3" }, children: [] },
-                { id: "list-item-4", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { label: "Item 4" }, children: [] },
-                { id: "list-item-5", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { label: "Item 5" }, children: [] },
+                { id: "list-item-1", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { componentType: "ListItemText", primary: "Item 1" }, children: [] },
+                { id: "list-item-2", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { componentType: "ListItemText", primary: "Item 2" }, children: [] },
+                { id: "list-item-3", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { componentType: "ListItemText", primary: "Item 3" }, children: [] },
+                { id: "list-item-4", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { componentType: "ListItemText", primary: "Item 4" }, children: [] },
+                { id: "list-item-5", type: "component", layout: { minHeight: 48, flexGrow: 0 }, props: { componentType: "ListItemText", primary: "Item 5" }, children: [] },
               ],
             },
           ],
@@ -83,6 +84,7 @@ export const dashboardLayout: LayoutNode = {
                 padding: 24,
                 gap: 12,
               },
+              props: { componentType: "Typography", color: "text.secondary", children: "Select an item" },
               children: [],
             },
           ],
