@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import * as MUI from "@mui/material";
+import * as Icons from "@mui/icons-material";
 import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
@@ -28,7 +29,7 @@ interface LayoutRendererProps {
 }
 
 /** Reserved keys in node.props; not passed through to the MUI content component. */
-const RESERVED_PROPS = ["componentType"];
+const RESERVED_PROPS = ["componentType", "icon"];
 
 /**
  * Renders a single layout node with MUI (Box, Container, Stack, Grid) using Yoga-computed layout.
@@ -61,8 +62,15 @@ function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.React
     node.props && typeof node.props.componentType === "string"
       ? node.props.componentType
       : null;
+  const maybeIcon =
+    node.props && typeof (node.props as Record<string, unknown>).icon === "string"
+      ? ((node.props as Record<string, unknown>).icon as string)
+      : null;
+
+  const materialComponents = MUI as unknown as Record<string, React.ElementType>;
+  const iconComponents = Icons as unknown as Record<string, React.ElementType>;
   const ContentComponent = componentType
-    ? (MUI as unknown as Record<string, React.ElementType>)[componentType]
+    ? iconComponents[componentType] ?? materialComponents[componentType]
     : null;
   const restProps =
     node.props && componentType
@@ -73,7 +81,24 @@ function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.React
 
   const contentNode =
     componentType && ContentComponent ? (
-      <ContentComponent {...restProps} />
+      componentType === "IconButton" && maybeIcon ? (
+        (() => {
+          const IconComponent = iconComponents[maybeIcon] ?? materialComponents[maybeIcon];
+          return (
+            <ContentComponent {...restProps}>
+              {IconComponent ? (
+                <IconComponent />
+              ) : (
+                <MUI.Typography variant="caption" color="error">
+                  Unknown icon: {maybeIcon}
+                </MUI.Typography>
+              )}
+            </ContentComponent>
+          );
+        })()
+      ) : (
+        <ContentComponent {...restProps} />
+      )
     ) : componentType ? (
       <MUI.Typography variant="body2" color="error">
         Unknown component: {componentType}
