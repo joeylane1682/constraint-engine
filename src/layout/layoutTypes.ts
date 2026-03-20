@@ -47,6 +47,10 @@ export interface ResponsiveOverrides {
 export interface LayoutNode {
   id: string;
   type: LayoutNodeType;
+  meta: {
+    injectable: boolean;
+    regionKey?: string;
+  };
   children?: LayoutNode[];
   layout?: LayoutSpec;
   props?: Record<string, unknown>;

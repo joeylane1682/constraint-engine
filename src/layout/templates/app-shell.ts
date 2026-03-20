@@ -5,6 +5,9 @@ import type { LayoutNode } from "../layoutTypes";
 export const appShellLayout: LayoutNode = {
   id: "root",
   type: "page",
+  meta: {
+    injectable: false,
+  },
   layout: {
     flexDirection: "column",
     padding: 0,
@@ -15,6 +18,9 @@ export const appShellLayout: LayoutNode = {
     {
       id: "global-header",
       type: "section",
+      meta: {
+        injectable: false,
+      },
       layout: {
         flexDirection: "row",
         height: 64,
@@ -28,6 +34,9 @@ export const appShellLayout: LayoutNode = {
     {
       id: "application-title-bar",
       type: "section",
+      meta: {
+        injectable: false,
+      },
       layout: {
         flexDirection: "row",
         height: 48,
@@ -40,6 +49,10 @@ export const appShellLayout: LayoutNode = {
     {
       id: "main-content",
       type: "section",
+      meta: {
+        injectable: true,
+        regionKey: "main-content",
+      },
       layout: {
         flexDirection: "column",
         flexGrow: 1,

@@ -14,6 +14,59 @@ import type {
 } from "./layoutTypes";
 import type { Node as YogaNode } from "yoga-layout";
 
+function isBlank(value: unknown): boolean {
+  return typeof value !== "string" || value.trim() === "";
+}
+
+export function validateLayoutTree(root: LayoutNode): void {
+  const regionOwners = new Map<string, string[]>();
+
+  function walk(node: LayoutNode): void {
+    const meta = node.meta;
+    if (!meta) {
+      throw new Error(`Invalid layout meta at node "${node.id}": meta is required.`);
+    }
+
+    const { injectable, regionKey } = meta;
+    if (injectable && isBlank(regionKey)) {
+      throw new Error(
+        `Invalid layout meta at node "${node.id}": injectable nodes must include a non-empty regionKey.`
+      );
+    }
+    if (!injectable && !isBlank(regionKey)) {
+      console.warn(
+        `Redundant regionKey on non-injectable node "${node.id}": regionKey should be absent when injectable is false.`
+      );
+    }
+    if (injectable && !isBlank(regionKey)) {
+      const normalized = String(regionKey).trim();
+      if (normalized !== node.id) {
+        console.warn(
+          `Injectable node "${node.id}" has regionKey "${normalized}" that does not match id; prefer regionKey === id.`
+        );
+      }
+      const owners = regionOwners.get(normalized) ?? [];
+      owners.push(node.id);
+      regionOwners.set(normalized, owners);
+    }
+
+    const children = node.children ?? [];
+    for (let i = 0; i < children.length; i++) {
+      walk(children[i]);
+    }
+  }
+
+  walk(root);
+
+  for (const [regionKey, owners] of regionOwners) {
+    if (owners.length > 1) {
+      console.warn(
+        `Duplicate regionKey "${regionKey}" found on nodes: ${owners.join(", ")}`
+      );
+    }
+  }
+}
+
 //Convert layout spec into yoga properties
 function applyLayoutSpec(yogaNode: YogaNode, spec: LayoutSpec | undefined): void {
   if (!spec) return;
@@ -85,13 +138,14 @@ function applyLayoutSpec(yogaNode: YogaNode, spec: LayoutSpec | undefined): void
 }
 
 //Converts tree node into Yoga node
-export function layoutNodeToYogaNode(node: LayoutNode): YogaNode {
+export function layoutNodeToYogaNode(node: LayoutNode, isRoot = true): YogaNode {
+  if (isRoot) validateLayoutTree(node);
   const yogaNode = Yoga.Node.createDefault();
   applyLayoutSpec(yogaNode, node.layout);
 
   const children = node.children ?? [];
   for (let i = 0; i < children.length; i++) {
-    const childYoga = layoutNodeToYogaNode(children[i]);
+    const childYoga = layoutNodeToYogaNode(children[i], false);
     yogaNode.insertChild(childYoga, i);
   }
 

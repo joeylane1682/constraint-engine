@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { LayoutNode } from "./layoutTypes";
 import {
   layoutNodeToYogaNode,
@@ -8,6 +8,132 @@ import {
 import { appShellLayout } from "./templates/app-shell";
 
 describe("yogaAdapter", () => {
+  it("throws when a node is missing meta", () => {
+    const tree: LayoutNode = {
+      id: "root",
+      type: "page",
+      layout: { flexDirection: "column" },
+      children: [],
+      // @ts-expect-error test runtime validation for missing meta
+      meta: undefined,
+    };
+
+    expect(() => layoutNodeToYogaNode(tree)).toThrow(/meta is required/i);
+  });
+
+  it("throws when injectable node is missing regionKey", () => {
+    const tree: LayoutNode = {
+      id: "root",
+      type: "page",
+      layout: { flexDirection: "column" },
+      children: [
+        {
+          id: "main",
+          type: "section",
+          layout: { flexGrow: 1 },
+          children: [],
+          meta: { injectable: true },
+        },
+      ],
+      meta: { injectable: false },
+    };
+
+    expect(() => layoutNodeToYogaNode(tree)).toThrow(
+      /injectable nodes must include a non-empty regionKey/i
+    );
+  });
+
+  it("warns when non-injectable node includes regionKey", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tree: LayoutNode = {
+      id: "root",
+      type: "page",
+      layout: { flexDirection: "column" },
+      children: [
+        {
+          id: "main",
+          type: "section",
+          layout: { flexGrow: 1 },
+          children: [],
+          meta: { injectable: false, regionKey: "main-content" },
+        },
+      ],
+      meta: { injectable: false },
+    };
+
+    const rootYoga = layoutNodeToYogaNode(tree);
+    computeLayout(rootYoga, 1024, 600);
+    getComputedLayoutMap(tree, rootYoga);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/Redundant regionKey on non-injectable node "main"/)
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("warns on duplicate regionKey values", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tree: LayoutNode = {
+      id: "root",
+      type: "page",
+      layout: { flexDirection: "column" },
+      children: [
+        {
+          id: "main-a",
+          type: "section",
+          layout: { flexGrow: 1 },
+          children: [],
+          meta: { injectable: true, regionKey: "main-content" },
+        },
+        {
+          id: "main-b",
+          type: "section",
+          layout: { flexGrow: 1 },
+          children: [],
+          meta: { injectable: true, regionKey: "main-content" },
+        },
+      ],
+      meta: { injectable: false },
+    };
+
+    const rootYoga = layoutNodeToYogaNode(tree);
+    computeLayout(rootYoga, 1024, 600);
+    getComputedLayoutMap(tree, rootYoga);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/Duplicate regionKey "main-content"/)
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("warns when injectable regionKey differs from node id", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tree: LayoutNode = {
+      id: "root",
+      type: "page",
+      layout: { flexDirection: "column" },
+      children: [
+        {
+          id: "main-content",
+          type: "section",
+          layout: { flexGrow: 1 },
+          children: [],
+          meta: { injectable: true, regionKey: "content-main" },
+        },
+      ],
+      meta: { injectable: false },
+    };
+
+    const rootYoga = layoutNodeToYogaNode(tree);
+    computeLayout(rootYoga, 1024, 600);
+    getComputedLayoutMap(tree, rootYoga);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/does not match id; prefer regionKey === id/)
+    );
+    warnSpy.mockRestore();
+  });
+
   it("lays out a sidebar + content correctly", () => {
     const tree: LayoutNode = {
       id: "root",
@@ -19,14 +145,17 @@ describe("yogaAdapter", () => {
           type: "section",
           layout: { width: 256 },
           children: [],
+          meta: { injectable: false },
         },
         {
           id: "content",
           type: "section",
           layout: { flexGrow: 1 },
           children: [],
+          meta: { injectable: false },
         },
       ],
+      meta: { injectable: false },
     };
 
     const rootYoga = layoutNodeToYogaNode(tree);
@@ -47,9 +176,22 @@ describe("yogaAdapter", () => {
       type: "page",
       layout: { flexDirection: "column" },
       children: [
-        { id: "header", type: "section", layout: { height: 64 }, children: [] },
-        { id: "main", type: "section", layout: { flexGrow: 1 }, children: [] },
+        {
+          id: "header",
+          type: "section",
+          layout: { height: 64 },
+          children: [],
+          meta: { injectable: false },
+        },
+        {
+          id: "main",
+          type: "section",
+          layout: { flexGrow: 1 },
+          children: [],
+          meta: { injectable: false },
+        },
       ],
+      meta: { injectable: false },
     };
 
     const rootYoga = layoutNodeToYogaNode(tree);
@@ -69,8 +211,15 @@ describe("yogaAdapter", () => {
       type: "page",
       layout: { flexDirection: "column", padding: 24 },
       children: [
-        { id: "inner", type: "section", layout: { flexGrow: 1 }, children: [] },
+        {
+          id: "inner",
+          type: "section",
+          layout: { flexGrow: 1 },
+          children: [],
+          meta: { injectable: false },
+        },
       ],
+      meta: { injectable: false },
     };
 
     const rootYoga = layoutNodeToYogaNode(tree);
@@ -94,17 +243,32 @@ describe("yogaAdapter", () => {
           type: "section",
           layout: { width: 200 },
           children: [],
+          meta: { injectable: false },
         },
         {
           id: "right",
           type: "section",
           layout: { flexDirection: "column", flexGrow: 1 },
           children: [
-            { id: "top", type: "section", layout: { height: 100 }, children: [] },
-            { id: "bottom", type: "section", layout: { flexGrow: 1 }, children: [] },
+            {
+              id: "top",
+              type: "section",
+              layout: { height: 100 },
+              children: [],
+              meta: { injectable: false },
+            },
+            {
+              id: "bottom",
+              type: "section",
+              layout: { flexGrow: 1 },
+              children: [],
+              meta: { injectable: false },
+            },
           ],
+          meta: { injectable: false },
         },
       ],
+      meta: { injectable: false },
     };
 
     const rootYoga = layoutNodeToYogaNode(tree);
@@ -126,6 +290,7 @@ describe("yogaAdapter", () => {
       type: "page",
       layout: {},
       children: [],
+      meta: { injectable: false },
     };
 
     const rootYoga = layoutNodeToYogaNode(tree);
@@ -143,9 +308,22 @@ describe("yogaAdapter", () => {
       type: "page",
       layout: { flexDirection: "row", gap: 16 },
       children: [
-        { id: "a", type: "section", layout: { width: 100 }, children: [] },
-        { id: "b", type: "section", layout: { width: 100 }, children: [] },
+        {
+          id: "a",
+          type: "section",
+          layout: { width: 100 },
+          children: [],
+          meta: { injectable: false },
+        },
+        {
+          id: "b",
+          type: "section",
+          layout: { width: 100 },
+          children: [],
+          meta: { injectable: false },
+        },
       ],
+      meta: { injectable: false },
     };
 
     const rootYoga = layoutNodeToYogaNode(tree);
