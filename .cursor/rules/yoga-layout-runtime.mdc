@@ -7,12 +7,20 @@ alwaysApply: false
 # Yoga Layout Runtime Contract
 
 ## Purpose
-Provide canonical definitions for layout-engine runtime terms and map them to source files so AI can reason consistently about model, workflow, and execution boundaries.
+Provide canonical definitions for layout-engine **runtime** terms and map them to source files so AI can reason consistently about model, workflow, and execution boundaries.
+
+Product workflow (template → page module → `regions`) is defined in `/.cursor/rules/layout-engine.mdc`. This file governs **Yoga translation, validation, and layout geometry** only.
+
+---
+
+## Terminology (runtime)
+- **Layout tree** — A `LayoutNode` root passed into the adapter. It may originate from a **template** (`src/layout/templates/`) or a **page module** (`src/pages/`); the adapter does not distinguish—same validation and Yoga behavior.
+- For **template**, **page module**, and file-ownership terms**, see `/.cursor/rules/layout-engine.mdc` (**Terminology**).
 
 ## Canonical Terms and File Anchors
 - `LayoutNode`:
   - Defined in `src/layout/layoutTypes.ts`
-  - Tree unit used for template structure and region ownership.
+  - Tree unit for structure and region ownership (`meta`, `layout`, children).
 - `meta`:
   - Defined in `src/layout/layoutTypes.ts`
   - Runtime validation enforced in `src/layout/yogaAdapter.ts`
@@ -23,17 +31,15 @@ Provide canonical definitions for layout-engine runtime terms and map them to so
 - `ComputedLayoutMap`:
   - Produced in `src/layout/yogaAdapter.ts`
   - Consumed by `src/layout/LayoutRenderer.tsx` for absolute positioning.
-- Template tree:
-  - Sourced from `src/layout/templates/`.
 
 ## Runtime Pipeline (Authoritative)
-1. Template tree (`LayoutNode`) is selected from `src/layout/templates/`.
+1. A **layout tree** (`LayoutNode`) is supplied—e.g. from a **page module** or, during prototyping, exported from a **template**.
 2. Validation gate runs (`validateLayoutTree`) in `src/layout/yogaAdapter.ts`.
 3. Tree is translated to Yoga nodes (`layoutNodeToYogaNode`).
 4. Yoga computes geometry (`computeLayout`).
 5. Geometry is extracted (`getComputedLayoutMap`).
 6. Renderer resolves React output using computed map (`src/layout/LayoutRenderer.tsx`).
-7. Region content is mounted by `regionKey` for injectable nodes.
+7. Region content is mounted by `regionKey` for injectable nodes (see `layout-engine`).
 
 ## Validation Semantics
 - Every node must include `meta`.
@@ -47,7 +53,7 @@ Yoga runtime is responsible for geometry, not content semantics.
 
 AI MUST NOT:
 - Change Yoga adapter behavior unless task explicitly targets runtime semantics.
-- Mutate template-owned structure outside injectable regions.
+- Mutate non-injectable **layout tree** structure outside injectable regions.
 - Redefine `LayoutSpec` semantics when composing region content.
 
 AI MAY:
@@ -60,5 +66,6 @@ AI MAY:
 - Keep region mapping contract stable via `regionKey`.
 
 ## Test Anchors
-- Runtime and validation behavior are verified in `src/layout/yogaAdapter.test.ts`.
+- Runtime and validation behavior are verified in `tests/layout-engine/yogaAdapter.test.ts`.
+- LayoutRenderer / `regions` behavior: `tests/layout-engine/LayoutRenderer.test.tsx`, `tests/layout-engine/LayoutView.test.tsx`.
 - Any semantic change to adapter/validation should update corresponding tests.

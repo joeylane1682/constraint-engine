@@ -25,9 +25,13 @@ const MUI_MAP: Record<LayoutNode["type"], React.ElementType> = {
   component: Box,
 };
 
+/** Injectable slots mount React from page composition via `meta.regionKey` (not from blueprint `children`). */
+export type RegionsMap = Readonly<Record<string, React.ReactNode>>;
+
 interface LayoutRendererProps {
   node: LayoutNode;
   computedMap: ComputedLayoutMap;
+  regions: RegionsMap;
 }
 
 /** Reserved keys in node.props; not passed through to the MUI content component. */
@@ -35,10 +39,11 @@ const RESERVED_PROPS = ["componentType", "icon"];
 
 /**
  * Renders a single layout node with MUI (Box, Container, Stack, Grid) using Yoga-computed layout.
- * If node.props.componentType is set, resolves that name from MUI and renders it as content
+ * Injectable nodes render `regions[meta.regionKey]` inside the Yoga-sized shell.
+ * Otherwise, if node.props.componentType is set, resolves that name from MUI and renders it as content
  * inside the layout wrapper; unknown names render a fallback to avoid crashes.
  */
-function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.ReactElement {
+function LayoutNodeView({ node, computedMap, regions }: LayoutRendererProps): React.ReactElement {
   const computed = computedMap[node.id];
   const children = node.children ?? [];
   const MuiComponent = MUI_MAP[node.type];
@@ -57,7 +62,7 @@ function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.React
     : {};
 
   const childElements = children.map((child) => (
-    <LayoutNodeView key={child.id} node={child} computedMap={computedMap} />
+    <LayoutNodeView key={child.id} node={child} computedMap={computedMap} regions={regions} />
   ));
 
   if (node.id === "global-header") {
@@ -72,6 +77,21 @@ function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.React
     return (
       <MuiComponent sx={layoutSx}>
         <ApplicationTitleBar />
+      </MuiComponent>
+    );
+  }
+
+  const regionKeyRaw = node.meta.regionKey;
+  if (
+    node.meta.injectable &&
+    typeof regionKeyRaw === "string" &&
+    regionKeyRaw.trim() !== ""
+  ) {
+    const regionKey = regionKeyRaw.trim();
+    return (
+      <MuiComponent sx={layoutSx}>
+        {regions[regionKey] ?? null}
+        {childElements}
       </MuiComponent>
     );
   }
@@ -134,12 +154,13 @@ function LayoutNodeView({ node, computedMap }: LayoutRendererProps): React.React
 interface LayoutRendererRootProps {
   tree: LayoutNode;
   computedMap: ComputedLayoutMap;
+  regions: RegionsMap;
 }
 
 /**
  * Root wrapper: holds the layout tree with position relative so root node is the containing block.
  */
-export function LayoutRenderer({ tree, computedMap }: LayoutRendererRootProps): React.ReactElement {
+export function LayoutRenderer({ tree, computedMap, regions }: LayoutRendererRootProps): React.ReactElement {
   const rootComputed = computedMap[tree.id];
   const rootSx = rootComputed
     ? {
@@ -154,7 +175,7 @@ export function LayoutRenderer({ tree, computedMap }: LayoutRendererRootProps): 
 
   return (
     <Box sx={rootSx}>
-      <LayoutNodeView node={tree} computedMap={computedMap} />
+      <LayoutNodeView node={tree} computedMap={computedMap} regions={regions} />
     </Box>
   );
 }
@@ -163,6 +184,8 @@ interface LayoutViewProps {
   tree: LayoutNode;
   width: number;
   height: number;
+  /** Keys must match injectable `meta.regionKey` on the layout tree. */
+  regions?: RegionsMap;
 }
 
 /**
@@ -170,7 +193,7 @@ interface LayoutViewProps {
  * Use when you have a known width/height (e.g. from a container ref).
  * On Yoga load/layout failure, shows an error message instead of white-screen.
  */
-export function LayoutView({ tree, width, height }: LayoutViewProps): React.ReactElement | null {
+export function LayoutView({ tree, width, height, regions = {} }: LayoutViewProps): React.ReactElement | null {
   const [computedMap, setComputedMap] = useState<ComputedLayoutMap | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
@@ -206,11 +229,12 @@ export function LayoutView({ tree, width, height }: LayoutViewProps): React.Reac
     );
   }
   if (computedMap == null) return null;
-  return <LayoutRenderer tree={tree} computedMap={computedMap} />;
+  return <LayoutRenderer tree={tree} computedMap={computedMap} regions={regions} />;
 }
 
 interface LayoutViewWithRefProps {
   tree: LayoutNode;
+  regions?: RegionsMap;
 }
 
 /**
@@ -226,7 +250,7 @@ function getViewportSize(): { width: number; height: number } {
  * Measures a container via ref, then runs the layout pipeline and renders.
  * Initial size is viewport (100vw × 100vh); ResizeObserver keeps it in sync.
  */
-export function LayoutViewWithRef({ tree }: LayoutViewWithRefProps): React.ReactElement {
+export function LayoutViewWithRef({ tree, regions = {} }: LayoutViewWithRefProps): React.ReactElement {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState(getViewportSize);
 
@@ -244,7 +268,7 @@ export function LayoutViewWithRef({ tree }: LayoutViewWithRefProps): React.React
 
   return (
     <Box ref={containerRef} sx={{ width: "100vw", height: "100vh", overflow: "auto" }}>
-      <LayoutView tree={tree} width={size.width} height={size.height} />
+      <LayoutView tree={tree} width={size.width} height={size.height} regions={regions} />
     </Box>
   );
 }

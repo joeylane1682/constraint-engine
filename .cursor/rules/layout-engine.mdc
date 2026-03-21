@@ -6,78 +6,184 @@ alwaysApply: true
 # Layout Engine Contract
 
 ## Purpose
-Define the end-to-end layout engine process for AI interpretation and enforce governance over subordinate contracts.
+Define the end-to-end layout engine process for AI composition and enforce governance over subordinate contracts.
 
-Governed contracts:
+Governed contracts (MUST be read and enforced before any repository code changes):
 - `/.cursor/rules/yoga-layout-runtime.mdc`
 - `/.cursor/rules/component-usage.mdc`
 - `/.cursor/rules/layout-heuristics.mdc`
 
-This rule controls process and scope. Subordinate rules control runtime semantics and local decisions inside composition.
+This file is the process and output authority for the layout pipeline.
+Subordinate contracts are decision authorities for runtime semantics, composition, and components.
 
-## Runtime Context Prerequisite
-Before executing workflow steps, AI MUST first apply `/.cursor/rules/yoga-layout-runtime.mdc` to resolve canonical term meanings (`LayoutNode`, `meta`, `layout`, `regionKey`) and runtime pipeline boundaries.
+---
 
-## Required Inputs
-- A valid template (`LayoutNode` tree)
-- Node metadata on every node: `meta.injectable: boolean`
-- `regionKey` for each injectable node
-- User prompt + intent constraints
+## Enforce vs review
+Enforce a rule means: read it, extract its MUST/MUST NOT constraints, and satisfy those constraints in all generation decisions and outputs.
+Passive reading without constraint satisfaction is not sufficient.
 
-## Project Anchors
-- Template library: `src/layout/templates/`
-- Reusable layout patterns: `src/layout/patterns/`
-- Page composition outputs: `src/pages/`
-- Region-level UI outputs: `src/pages/regions/`
+---
 
-## Authoritative Workflow
-1. Read `/.cursor/rules/yoga-layout-runtime.mdc` first, then read this contract and remaining governed contracts.
-2. Interpret user prompt and extract design intent.
-3. Select the most appropriate template from `src/layout/templates/`.
-4. Validate template metadata before generation:
+## Terminology (use consistently)
+- **Template** — A module under `src/layout/templates/`; reusable layout source.
+- **Page module** — A module under `src/pages/` for one application route; owns the runtime **layout tree** for that screen.
+- **Layout tree** — A `LayoutNode` tree passed to Yoga (exported from a template or a page module).
+
+---
+
+## Authoritative workflow
+1. Enforce `/.cursor/rules/yoga-layout-runtime.mdc`, then this contract, then `layout-heuristics.mdc` and `component-usage.mdc` before any repository edits.
+2. Interpret user prompt and intent constraints.
+3. Select the most appropriate **template** from `src/layout/templates/`.
+4. Copy the template’s **layout tree** into a new **page module** under `src/pages/`.
+5. Validate layout metadata on that tree (see **Validation contract reference**):
    - throw: missing `meta`
    - throw: `injectable: true` without non-empty `regionKey`
    - warn: `injectable: false` with `regionKey`
    - warn: duplicate `regionKey` values
    - warn: injectable `regionKey !== id` (prefer equality)
-5. Identify injectable regions only (`meta.injectable === true`).
-6. For each injectable region:
-   - Prefer an existing pattern from `src/layout/patterns/` first.
-   - If no pattern applies, compose with allowed layout primitives and approved React/MUI components.
-   - Apply `layout-heuristics` for spatial/composition decisions.
-   - Apply `component-usage` for component correctness and restrictions.
-7. Build region output map by `regionKey` (do not mutate template structure).
-8. Persist generated page/region artifacts only when explicitly requested; when persisted, write to `src/pages/` and `src/pages/regions/`.
-9. Pass template tree to Yoga adapter for layout computation.
-10. Render computed layout and mount region content by `regionKey`.
-11. Return final React/MUI page output.
+6. Discover injectable nodes and collect `regionKey`s (see **Region mapping authority**).
+7. Compose UI for each injectable region:
+   - Prefer existing pattern from `src/layout/patterns/`.
+   - Otherwise compose with allowed primitives and approved React/MUI components.
+   - Apply `layout-heuristics` and `component-usage`.
+8. Build `regions: Record<string, ReactNode>` in the **page module**. Map keys MUST be exactly each injectable node's `meta.regionKey` on the **page module’s layout tree** (see **Region mapping authority**). When writing files, implement injectable UI as modules under `src/pages/regions/` and wire them into `regions` by `regionKey`.
+9. Keep the **layout tree** structural-only; do not mutate `LayoutNode.children` for generated content.
+10. If modifying repository code:
+   - write/update page composition in `src/pages/`
+   - write/update region UI in `src/pages/regions/`
+   - keep `src/App.jsx` wiring-only (see **App entry wiring constraint**)
+   If not modifying repository code:
+   - return non-persistent output only (see **File persistence rules**)
+11. Pass the unchanged **layout tree** from the **page module** to the Yoga adapter for layout computation.
+12. Render computed layout; for each injectable node, mount `regions[node.meta.regionKey]` (see **Region mapping authority**).
+13. Return final React/MUI output.
 
-## Mandatory Governance
-- AI MUST apply all governed contracts whenever composing UI for injectable regions.
-- AI MUST treat this file as process/scope authority; subordinate contracts are decision authorities.
+---
 
-## Structural Invariants
+## Required inputs (and where they live)
+
+| Input | Role | Canonical location / definition |
+|-------|------|-------------------------------|
+| Template | Reusable **layout tree** source | `src/layout/templates/` |
+| Page module layout tree | Runtime **layout tree** for a route | `src/pages/` (starts as a copy from a template) |
+| Node metadata | Injectable flag + region ownership metadata | `src/layout/layoutTypes.ts` (`LayoutNode.meta`) |
+| Region keys | Authoritative keys for `regions` | Injectable nodes: `meta.regionKey` on the **page module layout tree** |
+| Validation semantics | Defines throw vs warn for metadata contract | `/.cursor/rules/yoga-layout-runtime.mdc`; runtime: `validateLayoutTree` in `src/layout/yogaAdapter.ts` |
+| User prompt + constraints | Content/UX intent inside injectable regions | User message |
+
+### Why these inputs are required
+- The **layout tree** defines structure and which nodes may receive generated UI.
+- **Node metadata** defines injectability and region ownership.
+- **`meta.regionKey`** is the sole authority for `regions` map keys for injectable slots.
+- **Validation semantics** keep hard-fail vs warn behavior consistent.
+- **User prompt + constraints** define what to compose without mutating non-injectable structure.
+
+---
+
+## Canonical outputs
+
+### Runtime content channel (when implementing UI in-repo)
+- `regions: Record<string, ReactNode>` whose keys are **exactly** the `meta.regionKey` values of injectable nodes on the **page module layout tree**.
+- Build `regions` in the **page module** under `src/pages/`.
+- Pass `regions` through layout view wiring; renderer mounts `regions[node.meta.regionKey]` for injectable nodes (`src/layout/LayoutRenderer.tsx`).
+
+### Repository files (when AI is modifying repository code)
+- Page module(s): `src/pages/`
+- Region UI module(s): `src/pages/regions/` (React for injectable slots; keys match `meta.regionKey` on the page layout tree)
+- App entry: `src/App.jsx` — wiring only (imports + mount), no large inline generated region JSX.
+
+When AI is not modifying repository files (response-only), output is non-persistent.
+
+---
+
+## Region mapping authority
+Authority for `regions` keys is **only** the **page module layout tree**.
+
+AI MUST:
+- Discover injectable nodes where `meta.injectable === true`.
+- For each injectable node, use `meta.regionKey` as the key in `regions`.
+- Ensure every injectable slot that receives UI has a defined `regions[regionKey]`.
+- Fail strict validation if any required injectable `regionKey` is missing from `regions`.
+
+AI MUST NOT:
+- Use component/file names, display titles, or ad hoc strings as `regions` keys.
+- Derive keys from anything other than injectable `meta.regionKey` on the **page module layout tree**.
+
+---
+
+## App entry wiring constraint
+`src/App.jsx` is wiring-only when implementing this pipeline in-repo.
+
+AI MUST:
+- Import the **page module** from `src/pages/` (which provides the **layout tree** and the `regions` map whose keys match injectable `meta.regionKey` on that tree).
+- Pass `tree` and `regions` into the layout root component so mounting can resolve `regions[node.meta.regionKey]` per injectable node.
+
+AI MUST NOT:
+- Place prompt-generated region UI as large inline JSX in `src/App.jsx`.
+- Construct `regions` keys that are not `meta.regionKey` values from the **page module layout tree**.
+
+---
+
+## File persistence rules
+- Default for response-only interactions: no file creation.
+- When AI creates/updates repository files for generated UI:
+  - page composition in `src/pages/`
+  - region UI in `src/pages/regions/`
+  - app entry remains wiring-only
+- If repository-write intent is ambiguous, AI MUST ask one clarification question before writing files.
+- Do not create new template files per prompt unless explicitly requested.
+
+---
+
+## Validation contract reference
+Semantics: `/.cursor/rules/yoga-layout-runtime.mdc`
+Runtime enforcement: `validateLayoutTree` in `src/layout/yogaAdapter.ts`
+
+---
+
+## Project anchors
+- Templates: `src/layout/templates/`
+- Reusable layout patterns: `src/layout/patterns/`
+- Page modules: `src/pages/`
+- Region UI (`regionKey` → React): `src/pages/regions/`
+- App entry wiring: `src/App.jsx`
+- Types: `src/layout/layoutTypes.ts`
+- Validation + Yoga translation: `src/layout/yogaAdapter.ts`
+- Layout compute + region mount: `src/layout/LayoutRenderer.tsx`
+
+---
+
+## Structural invariants
 AI MUST NOT:
 - Modify non-injectable node structure or children.
-- Override template-owned page scaffolding.
-- Override Yoga behavior or `LayoutSpec` model.
+- Override **layout tree** scaffolding owned by the template / page module (non-injectable structure).
+- Override Yoga behavior or `LayoutSpec` semantics.
+- Materialize generated UI by appending/modifying `LayoutNode.children`.
 
 AI MAY:
-- Compose UI only inside injectable regions.
+- Compose UI only for injectable regions through `regions`.
 - Select patterns/components within governed contracts.
 
-## Naming and Mapping Contract
+---
+
+## Naming and mapping contract
 - Use `kebab-case` for `id` and `regionKey`.
 - Default: for injectable nodes, `regionKey` should equal `id`.
-- Region mapping key is `regionKey`, not component filename.
+- `regions` map keys MUST equal injectable `meta.regionKey` on the **page module layout tree**.
+- Every injectable slot MUST resolve to `regions[regionKey]` or fail strict validation.
 
-## Persistence Policy
-- Default behavior: do not create new template files per prompt.
-- Persist generated page artifacts only when explicitly requested.
+---
 
-## Conflict Resolution
+## Mandatory governance
+- AI MUST enforce all governed contracts whenever composing UI for injectable regions.
+- This file controls process and output behavior; subordinate contracts govern runtime semantics and local composition decisions.
+
+---
+
+## Conflict resolution
 When rules conflict:
-1. This rule (process/scope) wins.
-2. `yoga-layout-runtime` governs runtime term semantics and pipeline behavior.
+1. This rule (process/output authority) wins.
+2. `yoga-layout-runtime` governs runtime semantics and pipeline behavior.
 3. `layout-heuristics` governs layout composition decisions.
 4. `component-usage` governs component-level choices.
